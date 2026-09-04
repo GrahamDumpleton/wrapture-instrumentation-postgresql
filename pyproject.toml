@@ -41,6 +41,7 @@ Documentation = "https://wrapture.readthedocs.io"
 # dot in it, hence the quoted header.
 [project.entry-points."wrapture.instrumentation"]
 psycopg = "wrapture_instrumentation_postgresql.psycopg:PsycopgInstrumentation"
+psycopg2 = "wrapture_instrumentation_postgresql.psycopg2:Psycopg2Instrumentation"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -70,6 +71,7 @@ test = [
     "psycopg",
     "psycopg-binary; python_version < '3.15'",
     "psycopg-pool",
+    "psycopg2-binary; python_version < '3.15'",
     "pytest",
     "sqlalchemy",
     "wrapture-instrumentation",
@@ -88,6 +90,13 @@ testpaths = ["tests"]
 python_version = "3.12"
 strict = true
 files = ["src/wrapture_instrumentation_postgresql", "tests", "demo"]
+
+# psycopg2 ships no type information; its objects cross this package
+# through Any-typed hook modules and test helpers anyway, and the
+# recording classes necessarily subclass its (Any-typed) C types.
+[[tool.mypy.overrides]]
+module = ["psycopg2", "psycopg2.*"]
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 88
@@ -110,3 +119,4 @@ known-first-party = ["wrapture_instrumentation_postgresql"]
 # module-level imports legitimately follow that statement.
 [tool.ruff.lint.per-file-ignores]
 "tests/psycopg/*" = ["E402"]
+"tests/psycopg2/*" = ["E402"]

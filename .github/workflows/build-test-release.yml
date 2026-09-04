@@ -62,11 +62,12 @@ jobs:
 
   # Each target's suite against the other supported lines of its
   # driver, overlaid on the project environment as the Justfile's
-  # per-target recipes do, on Python 3.12: psycopg's binary wheel must
-  # match the psycopg version, and the older lines ship binary wheels
-  # only up to the Pythons of their day. The lock's own version is
-  # covered by the test job above. Keep this list in step with the
-  # Justfile.
+  # per-target recipes do, on Python 3.12: a driver's binary wheel
+  # must match its version (psycopg[binary] for psycopg, the
+  # psycopg2-binary distribution for psycopg2), and the older lines
+  # ship binary wheels only up to the Pythons of their day. The lock's
+  # own version is covered by the test job above. Keep this list in
+  # step with the Justfile.
   test-targets:
     name: Test ${{ matrix.target }} ${{ matrix.version }}
     runs-on: ubuntu-latest
@@ -76,10 +77,16 @@ jobs:
         include:
           - target: psycopg
             suite: psycopg
+            overlay: "psycopg[binary]"
             version: "3.1.20"
           - target: psycopg
             suite: psycopg
+            overlay: "psycopg[binary]"
             version: "3.2.10"
+          - target: psycopg2
+            suite: psycopg2
+            overlay: "psycopg2-binary"
+            version: "2.9.9"
     services:
       postgres:
         image: postgres:17
@@ -104,7 +111,7 @@ jobs:
           python-version: "3.12"
 
       - name: Run the ${{ matrix.target }} suite against ${{ matrix.target }} ${{ matrix.version }}
-        run: uv run --no-default-groups --group test --with "${{ matrix.target }}[binary]==${{ matrix.version }}" pytest tests/${{ matrix.suite }}
+        run: uv run --no-default-groups --group test --with "${{ matrix.overlay }}==${{ matrix.version }}" pytest tests/${{ matrix.suite }}
 
   lint:
     name: Lint and type check

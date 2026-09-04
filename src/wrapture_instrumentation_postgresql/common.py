@@ -26,7 +26,14 @@ SYSTEM = "postgresql"
 # the first to a length and the second to a count.
 
 _QUERY_NAMES = frozenset({"query", "sql", "statement", "command"})
-_PARAMETER_NAMES = frozenset({"params", "params_seq", "vars", "vars_list", "args"})
+_PARAMETER_NAMES = frozenset(
+    {"params", "params_seq", "vars", "vars_list", "parameters", "args"}
+)
+
+# File-like arguments (a COPY's source or sink) reduce to their type:
+# their repr can name a path, and their contents are the data.
+
+_FILE_NAMES = frozenset({"file", "source", "output"})
 
 
 def operation_of(sql: str) -> str:
@@ -113,10 +120,10 @@ def query_data(
 def captured(name: str | None, value: Any) -> Any:
     """SQL text reduces to its length, parameters to a count or their
     type (a parameter sequence may be a generator the driver has yet
-    to consume, and is never iterated), a context manager exit's
-    exception value and traceback to their types, and every unnamed
-    value to its type: the query and its data never reach the record
-    through argument capture."""
+    to consume, and is never iterated), a COPY's file to its type, a
+    context manager exit's exception value and traceback to their
+    types, and every unnamed value to its type: the query and its
+    data never reach the record through argument capture."""
 
     if name in _QUERY_NAMES:
         text = statement_of(value)
@@ -127,6 +134,9 @@ def captured(name: str | None, value: Any) -> Any:
     if name in _PARAMETER_NAMES:
         if isinstance(value, (list, tuple, dict)):
             return f"<{len(value)} values>"
+        return f"<{type(value).__name__}>"
+
+    if name in _FILE_NAMES:
         return f"<{type(value).__name__}>"
 
     # An exception's message is application data like any other; the

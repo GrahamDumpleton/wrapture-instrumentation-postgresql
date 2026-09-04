@@ -12,6 +12,7 @@ python_versions := "3.12 3.13 3.14 3.15"
 # by these. The lock's own latest is covered by the plain `test` runs,
 # so it is not repeated here.
 psycopg_versions := "3.1.20 3.2.10"
+psycopg2_versions := "2.9.9"
 
 # Where the compose file publishes the server for postgresql-start.
 postgresql_port := "54329"
@@ -88,6 +89,22 @@ test-psycopg-all *ARGS:
         just test-psycopg "${version}" {{ARGS}}
     done
 
+# The psycopg2 suite against one psycopg2 line, likewise on Python
+# 3.12 with psycopg2-binary at that version (the older line's wheels
+# stop at 3.12).
+# Run the psycopg2 suite against one psycopg2 version, e.g. `just test-psycopg2 2.9.9`.
+test-psycopg2 VERSION *ARGS:
+    UV_PROJECT_ENVIRONMENT=.venv-3.12 uv run --python 3.12 --no-default-groups --group test --with "psycopg2-binary=={{VERSION}}" pytest tests/psycopg2 {{ARGS}}
+
+# Run the psycopg2 suite against every version in psycopg2_versions.
+test-psycopg2-all *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for version in {{psycopg2_versions}}; do
+        echo "=== psycopg2 ${version} ==="
+        just test-psycopg2 "${version}" {{ARGS}}
+    done
+
 # Published on localhost; prints the URL to export for the demos or
 # for running the tests natively against it rather than a throwaway
 # container per session.
@@ -122,6 +139,13 @@ postgresql-clean:
 # Drive psycopg against the server WRAPTURE_POSTGRESQL_URL names with the instrumentation applied.
 demo-psycopg *ARGS:
     uv run --with "wrapture[otel]" python -m demo.psycopg {{ARGS}}
+
+# The same shapes through psycopg2: a table, inserts (one through
+# execute_values), a COPY, a rollback, a failing statement, with and
+# without SQL text recording; `--otel` as for demo-psycopg.
+# Drive psycopg2 against the server WRAPTURE_POSTGRESQL_URL names with the instrumentation applied.
+demo-psycopg2 *ARGS:
+    uv run --with "wrapture[otel]" python -m demo.psycopg2 {{ARGS}}
 
 # The package depends on a released wrapture. This overlays a checkout
 # of wrapture from the sibling directory as an editable install for the
