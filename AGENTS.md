@@ -3,8 +3,7 @@
 ## Project
 
 wrapture-instrumentation-postgresql is packaged instrumentation for
-the PostgreSQL client libraries (psycopg and psycopg2 now, asyncpg
-to follow), applied through wrapture. A database driver is the kind
+the PostgreSQL client libraries (psycopg, psycopg2 and asyncpg), applied through wrapture. A database driver is the kind
 of target the separate-package rule was drawn for: the core
 wrapture-instrumentation package covers only targets testable
 in-process with no separate backend, and this package's tests need a
@@ -131,8 +130,9 @@ see everything.
   where every driver has a wheel.
 
 - `just test-psycopg 3.1.20` runs the psycopg suite against one
-  psycopg line and `just test-psycopg2 2.9.9` the psycopg2 suite
-  against one psycopg2 line; the `-all` forms loop over the lists.
+  psycopg line, `just test-psycopg2 2.9.9` the psycopg2 suite against
+  one psycopg2 line and `just test-asyncpg 0.29.0` the asyncpg suite
+  against one asyncpg line; the `-all` forms loop over the lists.
 
 - `just postgresql-start` runs the compose file's server alone,
   published on localhost, and prints the URL to export for the demos

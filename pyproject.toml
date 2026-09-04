@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "wrapture-instrumentation-postgresql"
 dynamic = ["version"]
-description = "Instrumentation for the PostgreSQL client libraries (psycopg, psycopg2), applied through wrapture."
+description = "Instrumentation for the PostgreSQL client libraries (psycopg, psycopg2, asyncpg), applied through wrapture."
 readme = "README.md"
 license = "BSD-2-Clause"
 license-files = ["LICENSE"]
@@ -13,7 +13,7 @@ authors = [
     {name = "Graham Dumpleton", email = "Graham.Dumpleton@gmail.com"}
 ]
 requires-python = ">=3.12"
-keywords = ["wrapture", "instrumentation", "postgresql", "psycopg", "psycopg2", "tracing"]
+keywords = ["wrapture", "instrumentation", "postgresql", "psycopg", "psycopg2", "asyncpg", "tracing"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Programming Language :: Python :: 3",
@@ -42,6 +42,7 @@ Documentation = "https://wrapture.readthedocs.io"
 [project.entry-points."wrapture.instrumentation"]
 psycopg = "wrapture_instrumentation_postgresql.psycopg:PsycopgInstrumentation"
 psycopg2 = "wrapture_instrumentation_postgresql.psycopg2:Psycopg2Instrumentation"
+asyncpg = "wrapture_instrumentation_postgresql.asyncpg:AsyncpgInstrumentation"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -68,6 +69,7 @@ version = {attr = "wrapture_instrumentation_postgresql.__version__"}
 # The wheel-only drivers carry a marker for the versions their wheels
 # cover, and their suites skip themselves where the import fails.
 test = [
+    "asyncpg; python_version < '3.15'",
     "psycopg",
     "psycopg-binary; python_version < '3.15'",
     "psycopg-pool",
@@ -95,7 +97,7 @@ files = ["src/wrapture_instrumentation_postgresql", "tests", "demo"]
 # through Any-typed hook modules and test helpers anyway, and the
 # recording classes necessarily subclass its (Any-typed) C types.
 [[tool.mypy.overrides]]
-module = ["psycopg2", "psycopg2.*"]
+module = ["psycopg2", "psycopg2.*", "asyncpg", "asyncpg.*"]
 ignore_missing_imports = true
 
 [tool.ruff]
@@ -120,3 +122,4 @@ known-first-party = ["wrapture_instrumentation_postgresql"]
 [tool.ruff.lint.per-file-ignores]
 "tests/psycopg/*" = ["E402"]
 "tests/psycopg2/*" = ["E402"]
+"tests/asyncpg/*" = ["E402"]

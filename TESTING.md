@@ -16,7 +16,7 @@ The directory has two levels:
   cleanly.
 
 - One subdirectory per target, `tests/<target>/` (`tests/psycopg/`,
-  `tests/psycopg2/`),
+  `tests/psycopg2/`, `tests/asyncpg/`),
   holding that instrumentation's suite: settings validation, applying
   and removing the class directly, the whole path through
   `wrapture.instrumentation()` with a timeline recording what the
@@ -146,6 +146,7 @@ just postgresql-start
 export WRAPTURE_POSTGRESQL_URL=postgresql://postgres:postgres@localhost:54329/postgres
 just demo-psycopg
 just demo-psycopg2
+just demo-asyncpg
 ```
 
 With --otel the same events also export as OpenTelemetry spans over
@@ -197,12 +198,13 @@ just test-python 3.13
 The `test` dependency group installs each driver at whatever version
 the lock resolves. The instrumentation's `supports` range is kept
 honest by running its suite against other lines of the driver. Each
-line has a place in `psycopg_versions` or `psycopg2_versions` in the
-Justfile, run one at a time by `just test-psycopg 3.1.20` or
-`just test-psycopg2 2.9.9`, or all by the `-all` forms, and the CI
+line has a place in `psycopg_versions`, `psycopg2_versions` or
+`asyncpg_versions` in the Justfile, run one at a time by
+`just test-psycopg 3.1.20`, `just test-psycopg2 2.9.9` or
+`just test-asyncpg 0.29.0`, or all by the `-all` forms, and the CI
 workflow runs the same matrix. These runs use an environment of their
 own on Python 3.12 with the driver's binary distribution at the
-requested version (`psycopg[binary]`, `psycopg2-binary`): a driver's
+requested version (`psycopg[binary]`, `psycopg2-binary`, `asyncpg`): a driver's
 binary wheel must match its version, and the older lines ship binary
 wheels only up to the Pythons of their day, so 3.12 is the Python
 every line has a wheel for, and no libpq is needed from the machine. A test in the suite

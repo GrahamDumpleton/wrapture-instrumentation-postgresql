@@ -30,8 +30,7 @@ its tests need a real server, so this package's suite runs one in a
 docker container, and it carries the drivers as test dependencies
 (some of them compiled wheels) and its own release cadence, so the
 core package's test matrix stays light. One package covers every
-client library for the one backend: psycopg and psycopg2 now, and
-asyncpg to follow.
+client library for the one backend: psycopg, psycopg2 and asyncpg.
 
 ## Installation
 
@@ -39,7 +38,7 @@ asyncpg to follow.
 $ pip install wrapture-instrumentation-postgresql
 ```
 
-Installing it brings wrapture and nothing else. Neither driver is a
+Installing it brings wrapture and nothing else. No driver is a
 dependency: each instrumentation is inert until its driver is present,
 and wrapture checks the installed version against the range the
 instrumentation supports at apply time.
@@ -87,8 +86,9 @@ $ python -m wrapture.tools instrumentation --verbose
 | ------ | ------------------ | ------- | -------- |
 | [`psycopg`](https://github.com/GrahamDumpleton/wrapture-instrumentation-postgresql/blob/develop/src/wrapture_instrumentation_postgresql/psycopg/README.md) | psycopg 3.1+ (3.x) | Every query as one `database` leaf, however it was issued (a cursor's `execute` or `executemany`, the connection's shortcut, a streamed query, a COPY, a server-side cursor's DECLARE), plus the connection being opened and each transaction boundary (`commit`, `rollback`, the connection's context manager, and a `transaction()` block's begin and end, savepoints included); sync and async classes alike, and connections from a pool. Each event carries the system, the operation, and the database, host and port it reached; a failing statement records the driver's exception. The SQL text is recorded only with the `statement` setting on, bound parameters never. | `statement` |
 | [`psycopg2`](https://github.com/GrahamDumpleton/wrapture-instrumentation-postgresql/blob/develop/src/wrapture_instrumentation_postgresql/psycopg2/README.md) | psycopg2 2.9+ (2.x), psycopg2-binary alike | Every query as one `database` leaf, however it was issued (`execute`, `executemany`, `callproc`, the extras' batch helpers, a named cursor's DECLARE), each COPY (`copy_from`, `copy_to`, `copy_expert`), the connection being opened and each transaction boundary (`commit`, `rollback`, the connection's context manager); through recording subclasses injected by psycopg2's own factory mechanism, so your `cursor_factory` and `connection_factory` classes keep working and are recorded too. Each event carries the system, the operation, and the database, host and port it reached; a failing statement records the driver's exception. The SQL text (the template with its placeholders) is recorded only with the `statement` setting on, bound parameters never. | `statement` |
+| [`asyncpg`](https://github.com/GrahamDumpleton/wrapture-instrumentation-postgresql/blob/develop/src/wrapture_instrumentation_postgresql/asyncpg/README.md) | asyncpg 0.29+ (0.x) | Every query as one `database` leaf recorded around its await, however it was issued (a connection's `execute`, `executemany`, `fetch`, `fetchrow`, `fetchval` or `fetchmany`, a prepared statement's own fetches, a server-side cursor's DECLARE and each FETCH), each COPY, the connection being opened, and each transaction boundary, which asyncpg issues through `execute`. Each event carries the system, the operation, and the database, host and port it reached; a failing statement records the driver's exception. The SQL text (with its `$n` placeholders) is recorded only with the `statement` setting on, query arguments never. A connection taken from a pool does not yet record its queries (a wrapture fix is pending). | `statement` |
 
-The entry point name is the config's `name`"; the linked per-target
+The entry point name is the config's `name`""; the linked per-target
 README is the full user documentation: what records, what the events
 carry, the setting, and what is deliberately not traced.
 
@@ -104,7 +104,10 @@ By design, and where it goes:
   records its queries like any other, but taking and returning it are
   not database operations and are not recorded.
 
-- asyncpg: coming to this package as its own target.
+- A connection taken from an asyncpg pool does not yet record its
+  queries: the pool proxy calls the connection's methods through the
+  class, a calling convention wrapture's signature check does not
+  yet handle. The fix is on wrapture's side.
 
 - LISTEN/NOTIFY, large objects and two-phase commit are out of scope.
 

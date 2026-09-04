@@ -13,6 +13,7 @@ python_versions := "3.12 3.13 3.14 3.15"
 # so it is not repeated here.
 psycopg_versions := "3.1.20 3.2.10"
 psycopg2_versions := "2.9.9"
+asyncpg_versions := "0.29.0 0.30.0"
 
 # Where the compose file publishes the server for postgresql-start.
 postgresql_port := "54329"
@@ -105,6 +106,21 @@ test-psycopg2-all *ARGS:
         just test-psycopg2 "${version}" {{ARGS}}
     done
 
+# The asyncpg suite against one asyncpg line, likewise on Python 3.12
+# (the older lines' wheels stop at 3.12 or 3.13).
+# Run the asyncpg suite against one asyncpg version, e.g. `just test-asyncpg 0.29.0`.
+test-asyncpg VERSION *ARGS:
+    UV_PROJECT_ENVIRONMENT=.venv-3.12 uv run --python 3.12 --no-default-groups --group test --with "asyncpg=={{VERSION}}" pytest tests/asyncpg {{ARGS}}
+
+# Run the asyncpg suite against every version in asyncpg_versions.
+test-asyncpg-all *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for version in {{asyncpg_versions}}; do
+        echo "=== asyncpg ${version} ==="
+        just test-asyncpg "${version}" {{ARGS}}
+    done
+
 # Published on localhost; prints the URL to export for the demos or
 # for running the tests natively against it rather than a throwaway
 # container per session.
@@ -146,6 +162,14 @@ demo-psycopg *ARGS:
 # Drive psycopg2 against the server WRAPTURE_POSTGRESQL_URL names with the instrumentation applied.
 demo-psycopg2 *ARGS:
     uv run --with "wrapture[otel]" python -m demo.psycopg2 {{ARGS}}
+
+# The same shapes through asyncpg: a table, inserts, the fetch family,
+# a transaction block with a rollback, a prepared statement, a cursor,
+# a COPY and a failing statement, with and without SQL text recording;
+# `--otel` as for demo-psycopg.
+# Drive asyncpg against the server WRAPTURE_POSTGRESQL_URL names with the instrumentation applied.
+demo-asyncpg *ARGS:
+    uv run --with "wrapture[otel]" python -m demo.asyncpg {{ARGS}}
 
 # The package depends on a released wrapture. This overlays a checkout
 # of wrapture from the sibling directory as an editable install for the

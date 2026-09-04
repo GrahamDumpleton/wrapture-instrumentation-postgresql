@@ -87,6 +87,14 @@ jobs:
             suite: psycopg2
             overlay: "psycopg2-binary"
             version: "2.9.9"
+          - target: asyncpg
+            suite: asyncpg
+            overlay: "asyncpg"
+            version: "0.29.0"
+          - target: asyncpg
+            suite: asyncpg
+            overlay: "asyncpg"
+            version: "0.30.0"
     services:
       postgres:
         image: postgres:17

@@ -27,7 +27,7 @@ SYSTEM = "postgresql"
 
 _QUERY_NAMES = frozenset({"query", "sql", "statement", "command"})
 _PARAMETER_NAMES = frozenset(
-    {"params", "params_seq", "vars", "vars_list", "parameters", "args"}
+    {"params", "params_seq", "vars", "vars_list", "parameters", "args", "records"}
 )
 
 # File-like arguments (a COPY's source or sink) reduce to their type:
@@ -42,7 +42,10 @@ def operation_of(sql: str) -> str:
 
     head = sql.split(None, 1)
 
-    return head[0].upper() if head else "?"
+    # A statement may end in its keyword ("COMMIT;"): the terminator is
+    # not part of the operation.
+
+    return head[0].upper().rstrip(";") if head else "?"
 
 
 def statement_of(query: Any, context: Any = None) -> str | None:
@@ -90,15 +93,16 @@ def server_of(info: Any) -> dict[str, Any]:
     return data
 
 
-def query_data(
+def statement_data(
     query: Any,
     context: Any,
-    info: Any,
+    server: dict[str, Any],
     record_statement: bool,
     operation: str | None = None,
 ) -> dict[str, Any]:
-    """The data for one query event: the contract keys, the server,
-    and the statement text when the setting asks for it."""
+    """The data for one query event: the contract keys, the server
+    keys given, and the statement text when the setting asks for it.
+    The operation is the one given, else the query's leading keyword."""
 
     text = statement_of(query, context)
 
@@ -109,12 +113,25 @@ def query_data(
     elif text is not None:
         data["operation"] = operation_of(text)
 
-    data.update(server_of(info))
+    data.update(server)
 
     if record_statement and text is not None:
         data["statement"] = text
 
     return data
+
+
+def query_data(
+    query: Any,
+    context: Any,
+    info: Any,
+    record_statement: bool,
+    operation: str | None = None,
+) -> dict[str, Any]:
+    """statement_data() with the server keys read from a driver's
+    connection info object (psycopg's and psycopg2's)."""
+
+    return statement_data(query, context, server_of(info), record_statement, operation)
 
 
 def captured(name: str | None, value: Any) -> Any:
