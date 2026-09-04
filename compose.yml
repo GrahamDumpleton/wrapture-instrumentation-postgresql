@@ -1,0 +1,56 @@
+# The PostgreSQL server the tests need, and a container to run the
+# tests in for the Python versions that need a libpq from the machine.
+#
+#   just test-docker 3.15         one version, extra args to pytest
+#   just test-docker-all          every supported version
+#   just postgresql-start         the server alone, published on
+#                                 localhost:54329 for the demos and
+#                                 for running the tests natively
+#
+# The tests container gets the server's URL in the environment, so the
+# suite's server fixture uses it and starts nothing itself, exactly as
+# on CI with its service container. uv's cache and the managed
+# interpreters live on one named volume and the per-version project
+# environments on another, so a rerun pays for neither the download
+# nor the install, and the container's environment never collides
+# with the .venv the host uses in the same directory.
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    ports:
+      - "127.0.0.1:${WRAPTURE_POSTGRESQL_PORT:-54329}:5432"
+
+  tests:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      WRAPTURE_POSTGRESQL_URL: postgresql://postgres:postgres@postgres:5432/postgres
+      UV_PYTHON: ${UV_PYTHON:-3.14}
+      UV_CACHE_DIR: /cache/uv
+      UV_PYTHON_INSTALL_DIR: /cache/python
+      UV_LINK_MODE: copy
+    volumes:
+      - .:/work
+      - uv-cache:/cache
+      - venvs:/venv
+    entrypoint:
+      - sh
+      - -c
+      - |
+        export UV_PROJECT_ENVIRONMENT="/venv/$$UV_PYTHON"
+        exec uv run --python "$$UV_PYTHON" --no-default-groups --group test pytest "$$@"
+      - tests
+
+volumes:
+  uv-cache:
+  venvs:
