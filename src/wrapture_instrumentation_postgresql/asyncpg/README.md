@@ -90,7 +90,9 @@ asyncpg.prepared_stmt:PreparedStatement.fetchval(args='<1 values>', column=0, ti
   (`asyncpg.UndefinedTableError`, say) on the event as it escapes; a
   timeout or cancellation arrives the same way. A pool made after the
   instrumentation is applied opens its connections through the
-  bound `connect`, on the task that awaited it, so those record too.
+  bound `connect`, on the task that awaited it, so those record too,
+  and a connection taken from the pool (`async with pool.acquire()
+  as conn:`) records its queries like one you opened yourself.
 
 ## Settings
 
@@ -117,16 +119,6 @@ prepared statement's own fetch, and the commit's `execute` beneath
 `_commit_impl`. Raw asyncpg use beside the engine records at the top
 level either way, and the dialect's setup queries show up beside the
 tree regardless, since they run outside the recorded seams.
-
-## Known gap
-
-A connection taken from a pool (`async with pool.acquire() as conn:`)
-does not yet record its queries: asyncpg's pool proxy calls the
-connection's methods through the class, `Connection.fetchval(
-connection, query)`, a calling convention wrapture's signature check
-does not yet handle. A fix is on wrapture's side and this note goes
-when it lands. The pool's connects record, and so does everything on
-a connection you opened yourself.
 
 ## How it patches
 

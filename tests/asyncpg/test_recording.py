@@ -401,20 +401,13 @@ def test_a_pool_opens_its_connections_through_connect(
     contract(event, postgresql, "CONNECT")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "asyncpg's PoolConnectionProxy calls Connection's methods through the"
-        " class, Connection.fetchval(connection, query), and wrapture's"
-        " signature check binds the arguments against the unbound function,"
-        " so the call is refused as missing its query; a wrapture fix is"
-        " needed (resolve the signature with the instance already bound"
-        " when wrapt hands over a partial)"
-    ),
-)
 def test_a_pooled_connection_records_its_queries(
     postgresql: Server, tape: Tape
 ) -> None:
+    # asyncpg's pool proxy calls the connection's methods through the
+    # class, Connection.fetchval(connection, query); wrapture (on
+    # wrapt 2.4.1) binds that the same as the instance call.
+
     async def workload() -> int:
         pool = await asyncpg.create_pool(postgresql.url, min_size=1, max_size=1)
         try:

@@ -28,7 +28,7 @@ classifiers = [
 # install psycopg, and whether a driver is present and at a supported
 # version is checked by wrapture at apply time from the class data.
 dependencies = [
-    "wrapture>=1.0.0a20",
+    "wrapture>=1.0.0a21",
 ]
 
 [project.urls]

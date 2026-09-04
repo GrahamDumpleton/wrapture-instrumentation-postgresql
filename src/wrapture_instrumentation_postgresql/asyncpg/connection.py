@@ -167,19 +167,8 @@ def instrument(module: Any, instrumentation: wrapture.Instrumentation) -> None:
         wrapped: Any, instance: Any, args: tuple[Any, ...], kwargs: dict[str, Any]
     ) -> Any:
         async def record() -> Any:
-            data = data_for(instance, query_of(args, kwargs), "COPY")
-            wrapture.annotate(**data)
-
-            # With arguments, asyncpg renders them into the query
-            # through a SELECT on this same connection before the COPY:
-            # a bound call beneath this leaf, silenced, whose own
-            # annotation would otherwise leave the event saying
-            # SELECT. The COPY's data is written again on the way out.
-
-            try:
-                return await wrapped(*args, **kwargs)
-            finally:
-                wrapture.annotate(**data)
+            wrapture.annotate(**data_for(instance, query_of(args, kwargs), "COPY"))
+            return await wrapped(*args, **kwargs)
 
         return record()
 
