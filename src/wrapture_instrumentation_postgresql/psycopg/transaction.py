@@ -28,6 +28,14 @@ def instrument(module: Any, instrumentation: wrapture.Instrumentation) -> None:
     """Bind the enter and exit of the sync and async transaction
     blocks; register their removal as this trigger's cleanup."""
 
+    # The connections aspect: its switch gates the bindings and its
+    # recording options splat over the package's masking policy, the
+    # declared leaf default among them.
+
+    connections = instrumentation.settings["connections"]
+    if not connections.enabled:
+        return
+
     def entered(instance: Any) -> dict[str, Any]:
         # Known only once the enter has run: whether this block began
         # the transaction or nested inside one.
@@ -107,9 +115,9 @@ def instrument(module: Any, instrumentation: wrapture.Instrumentation) -> None:
             owner,
             name,
             category="database",
-            leaf=True,
             capture_args=captured,
             capture_result=captured,
+            **connections.options,
         )
         binding.on_call.decorates(decorator)
 

@@ -96,7 +96,9 @@ def test_leaf_off_nests_the_driver_beneath_each_statement(
 ) -> None:
     with (
         instrumentation(Psycopg2Instrumentation, statement=True),
-        instrumentation(SQLAlchemyInstrumentation, leaf=False),
+        instrumentation(
+            SQLAlchemyInstrumentation, leaf=False, connections={"leaf": False}
+        ),
         timeline() as tape,
     ):
         workload(postgresql)

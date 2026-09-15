@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 import wrapture
-from wrapture import Setting
+from wrapture import Aspect, Setting
 
 from . import factories
 
@@ -30,14 +30,30 @@ class Psycopg2Instrumentation(wrapture.Instrumentation):
     supports = ">=2.9,<3"
     removable = True
 
+    # The aspects: the statements every query runs through, and the
+    # connections opened and the transaction boundaries. Each is a leaf
+    # by its declared default, so the driver's inner calls record
+    # nothing of their own; the statements aspect is primary, so its
+    # keys may be written flat on the entry.
+
     settings = {
-        "statement": Setting(
-            False,
-            "record the SQL text as handed to the driver on each query"
-            " event; off by default because the driver cannot tell a"
-            " literal an application interpolated from a placeholder,"
-            " and the text is only safe to record when queries are"
-            " parameterized",
+        "statements": Aspect(
+            "the execute family and COPY on every cursor, as database events",
+            primary=True,
+            leaf=True,
+            statement=Setting(
+                False,
+                "record the SQL text as handed to the driver on each query"
+                " event; off by default because the driver cannot tell a"
+                " literal an application interpolated from a placeholder,"
+                " and the text is only safe to record when queries are"
+                " parameterized",
+            ),
+        ),
+        "connections": Aspect(
+            "connections opened and the transaction boundaries the connection"
+            " performs, as database events",
+            leaf=True,
         ),
     }
 

@@ -35,6 +35,14 @@ def instrument(module: Any, instrumentation: wrapture.Instrumentation) -> None:
     the sync and async connection classes; register their removal as
     this trigger's cleanup."""
 
+    # The connections aspect: its switch gates the bindings and its
+    # recording options splat over the package's masking policy, the
+    # declared leaf default among them.
+
+    connections = instrumentation.settings["connections"]
+    if not connections.enabled:
+        return
+
     def opens(
         wrapped: Any, instance: Any, args: tuple[Any, ...], kwargs: dict[str, Any]
     ) -> Any:
@@ -121,9 +129,9 @@ def instrument(module: Any, instrumentation: wrapture.Instrumentation) -> None:
             owner,
             name,
             category="database",
-            leaf=True,
             capture_args=capture_args,
             capture_result=captured,
+            **connections.options,
         )
 
     named: dict[str, wrapture.Binding] = {}

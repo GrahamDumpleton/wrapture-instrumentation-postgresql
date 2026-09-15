@@ -50,11 +50,16 @@ class RecordedCopy:
     factory result: a block event around the real one."""
 
     def __init__(
-        self, label: str, cursor: Any, inner: Any, data: dict[str, Any]
+        self,
+        label: str,
+        cursor: Any,
+        inner: Any,
+        data: dict[str, Any],
+        options: dict[str, Any],
     ) -> None:
         self._cursor = cursor
         self._inner = inner
-        self._block = wrapture.block(label, category="database", data=data, leaf=True)
+        self._block = wrapture.block(label, category="database", data=data, **options)
 
     def _finish(
         self,
@@ -124,8 +129,25 @@ def instrument(module: Any, instrumentation: wrapture.Instrumentation) -> None:
     """Bind the execute family, stream and copy on the cursor classes;
     register their removal as this trigger's cleanup."""
 
-    settings = instrumentation.settings
-    record_statement = bool(settings["statement"])
+    # The statements aspect: its switch gates the bindings, its own
+    # setting says whether the SQL text is recorded, and its
+    # recording options splat over the package's masking policy, the
+    # declared leaf default among them.
+
+    statements = instrumentation.settings["statements"]
+    if not statements.enabled:
+        return
+
+    record_statement = bool(statements["statement"])
+
+    # The COPY block takes the aspect's leaf and stack keys, the ones a
+    # block has; it captures nothing, so the capture keys do not apply.
+
+    block_options = {
+        key: value
+        for key, value in statements.options.items()
+        if key in ("leaf", "stack")
+    }
 
     def query_of(args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
         return args[0] if args else kwargs.get("query", kwargs.get("statement"))
@@ -191,7 +213,9 @@ def instrument(module: Any, instrumentation: wrapture.Instrumentation) -> None:
         ) -> RecordedCopy:
             data = data_for(instance, query_of(args, kwargs), "COPY")
 
-            return RecordedCopy(label, instance, wrapped(*args, **kwargs), data)
+            return RecordedCopy(
+                label, instance, wrapped(*args, **kwargs), data, block_options
+            )
 
         return record
 
@@ -200,9 +224,9 @@ def instrument(module: Any, instrumentation: wrapture.Instrumentation) -> None:
             owner,
             name,
             category="database",
-            leaf=True,
             capture_args=captured,
             capture_result=captured,
+            **statements.options,
         )
 
     named: dict[str, wrapture.Binding] = {}

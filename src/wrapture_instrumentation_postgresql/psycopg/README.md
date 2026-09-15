@@ -108,11 +108,36 @@ psycopg:Connection.commit()
   point, so the statement events are short and the wait sits in the
   pipeline's exit; every statement still records.
 
+## Aspects
+
+The instrumentation binds these aspects, each a group of call sites
+with a switch, recording defaults and settings of its own:
+
+| Aspect | Wraps | Records by default |
+| ---- | ----- | ------------------ |
+| `statements` (primary) | `execute` and `executemany` on `Cursor` and `AsyncCursor` (and so the connection's `execute` shortcut), the server-side cursors' `execute`, `stream`, and the `copy` block, as database events | `leaf = true`; SQL as its length and parameters as a count, an explicit capture key under the aspect replacing that |
+| `connections` | `connect` in its three spellings, `commit`, `rollback` and the context manager exit on both connection classes, and the enter and exit of `transaction()` blocks, as database events | `leaf = true`; the connect capturing nothing, the boundaries their (empty) arguments, an explicit capture key under the aspect replacing that |
+
+An aspect is addressed as a sub-table of the entry,
+`[instrument.connections]`, and takes the recording keys an
+`[[observe]]` entry does (`capture`, `capture_args`, `capture_result`,
+`redact`, `redact_result`, `redact_marker`, `leaf` and `stack`) beside
+the settings listed below, so `capture_result = "types"` or
+`redact = ["token"]` under an aspect means exactly what it means on an
+observe entry. `enabled = false` under an aspect switches it off, and
+a bare `connections = false` on the entry means the same. The primary
+aspect's keys may be written flat on the entry. Each aspect is a leaf
+by default, which is what keeps one application call to one event;
+`leaf = false` under one exposes whatever the driver's inner calls
+record beneath it. The [aspects
+section](https://wrapture.readthedocs.io/en/latest/instrumentation-packages.html#aspects)
+of the wrapture documentation has the whole scheme.
+
 ## Settings
 
-| Setting | Default | Controls |
-| ------- | ------- | -------- |
-| `statement` | `false` | Whether each query event records the SQL text as handed to the driver, as `statement` (a composed `sql.SQL(...)` query rendered as it will be sent). Off by default because the driver cannot tell a literal an application interpolated from a placeholder; turn it on when your queries are parameterized, the text then carrying placeholders rather than data. A `sql.Literal` composed into a query is recorded as written, so prefer placeholders there too. Bound parameters are never recorded either way. |
+| Setting | Aspect | Default | Controls |
+| ------- | ---- | ------- | -------- |
+| `statement` | `statements` | `false` | Whether each query event records the SQL text as handed to the driver, as `statement` (a composed `sql.SQL(...)` query rendered as it will be sent). Off by default because the driver cannot tell a literal an application interpolated from a placeholder; turn it on when your queries are parameterized, the text then carrying placeholders rather than data. A `sql.Literal` composed into a query is recorded as written, so prefer placeholders there too. Bound parameters are never recorded either way. |
 
 ```toml
 [[instrument]]
@@ -122,18 +147,19 @@ statement = true
 
 ## With the sqlalchemy instrumentation
 
-An instrumented psycopg beneath the core package's `sqlalchemy`
-target composes through that target's `leaf` setting. With the
-default `leaf = true` each statement is one event and the driver's
-own events stay out of the tree; with `leaf = false` the driver's
-events nest beneath each statement, `psycopg:Cursor.execute` under
-`do_execute`, `psycopg:connect` under the dialect's `connect`, the
-async engine's `AsyncCursor.execute` likewise. Raw psycopg use beside
-the engine records at the top level either way. A little of the
-dialect's own housekeeping also shows up regardless, because it runs
-straight against the driver outside the recorded seams: the type
-lookups the psycopg dialect makes when it opens a connection, and
-the pool's reset-on-return rollback.
+An instrumented psycopg beneath the core package's `sqlalchemy` target
+composes through the `leaf` key on that target's aspects, `statements`
+(flat on the entry) and `connections`. With the default `leaf = true`
+each statement is one event and the driver's own events stay out of
+the tree; with `leaf = false` the driver's events nest beneath each
+statement, `psycopg:Cursor.execute` under `do_execute`, with
+`leaf = false` under `connections` too `psycopg:connect` under the
+dialect's `connect`, the async engine's `AsyncCursor.execute`
+likewise. Raw psycopg use beside the engine records at the top level
+either way. A little of the dialect's own housekeeping also shows up
+regardless, because it runs straight against the driver outside the
+recorded seams: the type lookups the psycopg dialect makes when it
+opens a connection, and the pool's reset-on-return rollback.
 
 ## How it patches
 

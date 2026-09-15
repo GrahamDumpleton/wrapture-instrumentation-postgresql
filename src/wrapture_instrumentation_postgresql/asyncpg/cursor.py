@@ -37,8 +37,16 @@ def instrument(module: Any, instrumentation: wrapture.Instrumentation) -> None:
     """Bind the cursor's round trips; register their removal as this
     trigger's cleanup."""
 
-    settings = instrumentation.settings
-    record_statement = bool(settings["statement"])
+    # The statements aspect: its switch gates the bindings, its own
+    # setting says whether the SQL text is recorded, and its
+    # recording options splat over the package's masking policy, the
+    # declared leaf default among them.
+
+    statements = instrumentation.settings["statements"]
+    if not statements.enabled:
+        return
+
+    record_statement = bool(statements["statement"])
 
     def round_trips(operation: str) -> Any:
         def decorator(
@@ -74,11 +82,11 @@ def instrument(module: Any, instrumentation: wrapture.Instrumentation) -> None:
         ("_bind", "DECLARE"),
         ("_exec", "FETCH"),
     ):
-        bound = database_binding(cursor_class, method)
+        bound = database_binding(cursor_class, method, statements)
         bound.on_call.decorates(round_trips(operation))
         named[method.lstrip("_")] = bound
 
-    forward = database_binding(module.Cursor, "forward")
+    forward = database_binding(module.Cursor, "forward", statements)
     forward.on_call.decorates(round_trips("MOVE"))
     named["forward"] = forward
 

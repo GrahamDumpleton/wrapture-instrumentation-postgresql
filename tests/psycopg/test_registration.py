@@ -65,10 +65,14 @@ def test_the_listing_tool_describes_the_entry() -> None:
     )
     assert "  modules: psycopg" in output
 
-    # The listing pads the setting names into a column, so the name
-    # and its description are checked apart.
+    # The listing prints each aspect as a block, its keys beneath it;
+    # it pads the setting names into a column, so the name and its
+    # description are checked apart.
 
-    assert "    statement = false " in output
+    assert "    statements (primary):" in output
+    assert "    connections:" in output
+    assert "      leaf = true" in output
+    assert "      statement = false " in output
     assert "record the SQL text as handed to the driver on each query" in output
 
 
@@ -76,4 +80,7 @@ def test_the_toml_template_carries_the_settings() -> None:
     output = run_tool("instrumentation", "--toml")
 
     assert '[[instrument]]\nname = "psycopg"\nenabled = false' in output
+    assert "# [instrument.statements]" in output
+    assert "# [instrument.connections]" in output
+    assert "# leaf = true" in output
     assert "# statement = false" in output

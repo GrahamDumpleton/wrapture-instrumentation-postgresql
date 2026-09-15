@@ -99,7 +99,9 @@ def test_leaf_off_nests_the_driver_beneath_each_statement(
 ) -> None:
     with (
         instrumentation(PsycopgInstrumentation, statement=True),
-        instrumentation(SQLAlchemyInstrumentation, leaf=False),
+        instrumentation(
+            SQLAlchemyInstrumentation, leaf=False, connections={"leaf": False}
+        ),
         timeline() as tape,
     ):
         workload(postgresql)
@@ -143,7 +145,9 @@ def test_the_async_engine_composes_the_same_way(postgresql: Server) -> None:
 
     with (
         instrumentation(PsycopgInstrumentation, statement=True),
-        instrumentation(SQLAlchemyInstrumentation, leaf=False),
+        instrumentation(
+            SQLAlchemyInstrumentation, leaf=False, connections={"leaf": False}
+        ),
         timeline() as tape,
     ):
         asyncio.run(run())

@@ -94,11 +94,36 @@ asyncpg.prepared_stmt:PreparedStatement.fetchval(args='<1 values>', column=0, ti
   and a connection taken from the pool (`async with pool.acquire()
   as conn:`) records its queries like one you opened yourself.
 
+## Aspects
+
+The instrumentation binds these aspects, each a group of call sites
+with a switch, recording defaults and settings of its own:
+
+| Aspect | Wraps | Records by default |
+| ---- | ----- | ------------------ |
+| `statements` (primary) | the execute and fetch family on `Connection`, its COPY methods, a prepared statement's fetch family and `explain`, and a server-side cursor's round trips, as database events | `leaf = true`; SQL as its length and parameters as a count, an explicit capture key under the aspect replacing that |
+| `connections` | `connect` in both spellings; transactions record through the statements they issue, as database events | `leaf = true`; the connect capturing nothing, the boundaries their (empty) arguments, an explicit capture key under the aspect replacing that |
+
+An aspect is addressed as a sub-table of the entry,
+`[instrument.connections]`, and takes the recording keys an
+`[[observe]]` entry does (`capture`, `capture_args`, `capture_result`,
+`redact`, `redact_result`, `redact_marker`, `leaf` and `stack`) beside
+the settings listed below, so `capture_result = "types"` or
+`redact = ["token"]` under an aspect means exactly what it means on an
+observe entry. `enabled = false` under an aspect switches it off, and
+a bare `connections = false` on the entry means the same. The primary
+aspect's keys may be written flat on the entry. Each aspect is a leaf
+by default, which is what keeps one application call to one event;
+`leaf = false` under one exposes whatever the driver's inner calls
+record beneath it. The [aspects
+section](https://wrapture.readthedocs.io/en/latest/instrumentation-packages.html#aspects)
+of the wrapture documentation has the whole scheme.
+
 ## Settings
 
-| Setting | Default | Controls |
-| ------- | ------- | -------- |
-| `statement` | `false` | Whether each query event records the SQL text as handed to the driver, as `statement`. Off by default because the driver cannot tell a literal an application interpolated from a placeholder; turn it on when your queries are parameterized, the text then carrying `$n` placeholders rather than data. Query arguments are never recorded either way. |
+| Setting | Aspect | Default | Controls |
+| ------- | ---- | ------- | -------- |
+| `statement` | `statements` | `false` | Whether each query event records the SQL text as handed to the driver, as `statement`. Off by default because the driver cannot tell a literal an application interpolated from a placeholder; turn it on when your queries are parameterized, the text then carrying `$n` placeholders rather than data. Query arguments are never recorded either way. |
 
 ```toml
 [[instrument]]
@@ -108,17 +133,19 @@ statement = true
 
 ## With the sqlalchemy instrumentation
 
-An instrumented asyncpg beneath the core package's `sqlalchemy`
-target (the `postgresql+asyncpg` async engine) composes through that
-target's `leaf` setting. With the default `leaf = true` each
-statement is one event and the driver's own events stay out of the
-tree; with `leaf = false` they nest beneath each statement. The
-asyncpg dialect prepares every statement and fetches through the
-prepared statement, so what appears beneath `do_execute` is the
-prepared statement's own fetch, and the commit's `execute` beneath
-`_commit_impl`. Raw asyncpg use beside the engine records at the top
-level either way, and the dialect's setup queries show up beside the
-tree regardless, since they run outside the recorded seams.
+An instrumented asyncpg beneath the core package's `sqlalchemy` target
+(the `postgresql+asyncpg` async engine) composes through the `leaf`
+key on that target's aspects, `statements` (flat on the entry) and
+`connections`. With the default `leaf = true` each statement is one
+event and the driver's own events stay out of the tree; with
+`leaf = false` they nest beneath each statement. The asyncpg dialect
+prepares every statement and fetches through the prepared statement,
+so what appears beneath `do_execute` is the prepared statement's own
+fetch, and with `leaf = false` under `connections` too the commit's
+`execute` beneath `_commit_impl`. Raw asyncpg use beside the engine
+records at the top level either way, and the dialect's setup queries
+show up beside the tree regardless, since they run outside the
+recorded seams.
 
 ## How it patches
 

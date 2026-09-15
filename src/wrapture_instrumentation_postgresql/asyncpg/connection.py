@@ -81,23 +81,26 @@ def query_of(args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
 
 
 def database_binding(
-    owner: Any, name: str, capture_args: Any = captured
+    owner: Any, name: str, aspect: Any, capture_args: Any = captured
 ) -> wrapture.Binding:
-    """A ready binding on one of the driver's methods, shared with the
+    """A ready binding on one of the driver's methods under the given
+    aspect, whose recording options splat over the package's masking
+    policy, the declared leaf default among them; shared with the
     prepared statement and cursor modules."""
 
     return wrapture.binding(
         owner,
         name,
         category="database",
-        leaf=True,
         capture_args=capture_args,
         capture_result=captured,
+        **aspect.options,
     )
 
 
-def opens_binding(owner: Any) -> wrapture.Binding:
-    """The connect binding for either spelling of connect."""
+def opens_binding(owner: Any, connections: Any) -> wrapture.Binding:
+    """The connect binding for either spelling of connect, under the
+    connections aspect."""
 
     async def opens(
         wrapped: Any, instance: Any, args: tuple[Any, ...], kwargs: dict[str, Any]
@@ -109,7 +112,7 @@ def opens_binding(owner: Any) -> wrapture.Binding:
 
         return connection
 
-    binding = database_binding(owner, "connect", "none")
+    binding = database_binding(owner, "connect", connections, "none")
     binding.on_call.decorates(opens)
 
     return binding
@@ -119,7 +122,11 @@ def instrument_package(module: Any, instrumentation: wrapture.Instrumentation) -
     """Bind the package's own spelling of connect; register its
     removal as this trigger's cleanup."""
 
-    group = wrapture.bindings(connect=opens_binding(module))
+    connections = instrumentation.settings["connections"]
+    if not connections.enabled:
+        return
+
+    group = wrapture.bindings(connect=opens_binding(module, connections))
     group.apply()
 
     instrumentation.on_cleanup(group.remove)
@@ -129,8 +136,13 @@ def instrument(module: Any, instrumentation: wrapture.Instrumentation) -> None:
     """Bind connect and the Connection methods; register their removal
     as this trigger's cleanup."""
 
-    settings = instrumentation.settings
-    record_statement = bool(settings["statement"])
+    # The aspects: the connections one gates connect, the statements one
+    # gates every other binding and says whether the SQL text is
+    # recorded.
+
+    statements = instrumentation.settings["statements"]
+    connections = instrumentation.settings["connections"]
+    record_statement = bool(statements["statement"])
 
     def data_for(
         connection: Any, query: Any, operation: str | None = None
@@ -172,7 +184,17 @@ def instrument(module: Any, instrumentation: wrapture.Instrumentation) -> None:
 
         return record()
 
-    named: dict[str, wrapture.Binding] = {"connect": opens_binding(module)}
+    named: dict[str, wrapture.Binding] = {}
+
+    if connections.enabled:
+        named["connect"] = opens_binding(module, connections)
+
+    if not statements.enabled:
+        group = wrapture.bindings(**named)
+        group.apply()
+        instrumentation.on_cleanup(group.remove)
+
+        return
 
     connection_class = module.Connection
 
@@ -188,18 +210,18 @@ def instrument(module: Any, instrumentation: wrapture.Instrumentation) -> None:
     ):
         if method not in vars(connection_class):
             continue
-        bound = database_binding(connection_class, method)
+        bound = database_binding(connection_class, method, statements)
         bound.on_call.decorates(queries)
         named[method] = bound
 
     # COPY: three methods name a table, one takes a query.
 
     for method in ("copy_from_table", "copy_to_table", "copy_records_to_table"):
-        bound = database_binding(connection_class, method)
+        bound = database_binding(connection_class, method, statements)
         bound.on_call.decorates(copies_table)
         named[method] = bound
 
-    bound = database_binding(connection_class, "copy_from_query")
+    bound = database_binding(connection_class, "copy_from_query", statements)
     bound.on_call.decorates(copies_query)
     named["copy_from_query"] = bound
 

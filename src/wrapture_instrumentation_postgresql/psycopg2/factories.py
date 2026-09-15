@@ -238,8 +238,15 @@ def instrument(module: Any, instrumentation: wrapture.Instrumentation) -> None:
     """Bind the connect factory and the mixins' methods; register
     their removal as this trigger's cleanup."""
 
-    settings = instrumentation.settings
-    record_statement = bool(settings["statement"])
+    # The aspects: the statements one gates the cursor bindings and
+    # says whether the SQL text is recorded, the connections one gates
+    # the connect and the boundaries; each splats its recording options
+    # over the package's masking policy, the declared leaf default
+    # among them.
+
+    statements = instrumentation.settings["statements"]
+    connections = instrumentation.settings["connections"]
+    record_statement = bool(statements["statement"])
 
     def data_for(
         cursor: Any, query: Any, operation: str | None = None
@@ -248,11 +255,9 @@ def instrument(module: Any, instrumentation: wrapture.Instrumentation) -> None:
             query, cursor, cursor.connection.info, record_statement, operation
         )
 
-    def opens(
-        wrapped: Any, instance: Any, args: tuple[Any, ...], kwargs: dict[str, Any]
-    ) -> Any:
-        wrapture.annotate(system=SYSTEM, operation="CONNECT")
-
+    def with_recording_factory(
+        args: tuple[Any, ...], kwargs: dict[str, Any]
+    ) -> tuple[tuple[Any, ...], dict[str, Any]]:
         # The requested connection class (keyword, or the second
         # positional slot) is replaced with its recording subclass.
 
@@ -269,6 +274,21 @@ def instrument(module: Any, instrumentation: wrapture.Instrumentation) -> None:
         else:
             args = (args[0], recording, *args[2:])
 
+        return args, kwargs
+
+    def substitutes(
+        wrapped: Any, instance: Any, args: tuple[Any, ...], kwargs: dict[str, Any]
+    ) -> Any:
+        args, kwargs = with_recording_factory(args, kwargs)
+
+        return wrapped(*args, **kwargs)
+
+    def opens(
+        wrapped: Any, instance: Any, args: tuple[Any, ...], kwargs: dict[str, Any]
+    ) -> Any:
+        wrapture.annotate(system=SYSTEM, operation="CONNECT")
+
+        args, kwargs = with_recording_factory(args, kwargs)
         connection = wrapped(*args, **kwargs)
         wrapture.annotate(**server_of(connection.info))
 
@@ -341,60 +361,81 @@ def instrument(module: Any, instrumentation: wrapture.Instrumentation) -> None:
         return wrapped(*args, **kwargs)
 
     def database_binding(
-        owner: Any, name: str, label: str | None = None, capture_args: Any = captured
+        owner: Any,
+        name: str,
+        aspect: Any,
+        label: str | None = None,
+        capture_args: Any = captured,
     ) -> wrapture.Binding:
         return wrapture.binding(
             owner,
             name,
             label=label,
             category="database",
-            leaf=True,
             capture_args=capture_args,
             capture_result=captured,
+            **aspect.options,
         )
 
     named: dict[str, wrapture.Binding] = {}
 
     # The factory: the module attribute's path says psycopg2:connect
     # already, so it takes no label, and none of its arguments are
-    # captured (the dsn carries the password).
+    # captured (the dsn carries the password). With the connections
+    # aspect off it still substitutes the recording subclass, which
+    # the cursor bindings need, and records nothing itself.
 
-    connect = database_binding(module, "connect", capture_args="none")
-    connect.on_call.decorates(opens)
+    if connections.enabled:
+        connect = database_binding(module, "connect", connections, capture_args="none")
+        connect.on_call.decorates(opens)
+    else:
+        connect = wrapture.binding(module, "connect", when=False)
+        connect.on_call.decorates(substitutes)
     named["connect"] = connect
 
     # The cursor methods, labelled with the psycopg2 names they stand
     # for.
 
-    for method, decorator in (
-        ("execute", queries),
-        ("executemany", queries),
-        ("callproc", calls),
-        ("copy_from", copies_table),
-        ("copy_to", copies_table),
-        ("copy_expert", copies_statement),
-    ):
-        bound = database_binding(
-            CursorMixin, method, label=f"psycopg2.extensions:cursor.{method}"
-        )
-        bound.on_call.decorates(decorator)
-        named[f"cursor_{method}"] = bound
+    if statements.enabled:
+        for method, decorator in (
+            ("execute", queries),
+            ("executemany", queries),
+            ("callproc", calls),
+            ("copy_from", copies_table),
+            ("copy_to", copies_table),
+            ("copy_expert", copies_statement),
+        ):
+            bound = database_binding(
+                CursorMixin,
+                method,
+                statements,
+                label=f"psycopg2.extensions:cursor.{method}",
+            )
+            bound.on_call.decorates(decorator)
+            named[f"cursor_{method}"] = bound
 
     # The transaction boundaries: the explicit calls, and the context
     # manager exit that performs one of them.
 
-    for method, operation in (("commit", "COMMIT"), ("rollback", "ROLLBACK")):
-        bound = database_binding(
-            ConnectionMixin, method, label=f"psycopg2.extensions:connection.{method}"
-        )
-        bound.on_call.decorates(performs(operation))
-        named[f"connection_{method}"] = bound
+    if connections.enabled:
+        for method, operation in (("commit", "COMMIT"), ("rollback", "ROLLBACK")):
+            bound = database_binding(
+                ConnectionMixin,
+                method,
+                connections,
+                label=f"psycopg2.extensions:connection.{method}",
+            )
+            bound.on_call.decorates(performs(operation))
+            named[f"connection_{method}"] = bound
 
-    closes = database_binding(
-        ConnectionMixin, "__exit__", label="psycopg2.extensions:connection.__exit__"
-    )
-    closes.on_call.decorates(leaves)
-    named["connection_exit"] = closes
+        closes = database_binding(
+            ConnectionMixin,
+            "__exit__",
+            connections,
+            label="psycopg2.extensions:connection.__exit__",
+        )
+        closes.on_call.decorates(leaves)
+        named["connection_exit"] = closes
 
     group = wrapture.bindings(**named)
     group.apply()

@@ -71,7 +71,12 @@ def test_the_listing_tool_describes_the_entry() -> None:
     )
     assert "  modules: asyncpg, asyncpg.connection" in output
 
-    assert "    statement = false " in output
+    # The listing prints each aspect as a block, its keys beneath it.
+
+    assert "    statements (primary):" in output
+    assert "    connections:" in output
+    assert "      leaf = true" in output
+    assert "      statement = false " in output
     assert "record the SQL text as handed to the driver on each query" in output
 
 
@@ -79,4 +84,7 @@ def test_the_toml_template_carries_the_settings() -> None:
     output = run_tool("instrumentation", "--toml")
 
     assert '[[instrument]]\nname = "asyncpg"\nenabled = false' in output
+    assert "# [instrument.statements]" in output
+    assert "# [instrument.connections]" in output
+    assert "# leaf = true" in output
     assert "# statement = false" in output

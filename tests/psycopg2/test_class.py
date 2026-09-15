@@ -14,7 +14,7 @@ pytest.importorskip("psycopg2")
 # import, so the applying test below works with this file run on its
 # own.
 import psycopg2  # noqa: F401
-from wrapture import ConfigError, ConfigWarning, instrumentation
+from wrapture import Aspect, ConfigError, ConfigWarning, instrumentation
 
 from wrapture_instrumentation_postgresql.psycopg2 import Psycopg2Instrumentation
 
@@ -25,8 +25,21 @@ def test_class_data() -> None:
     assert Psycopg2Instrumentation.requires == ()
     assert Psycopg2Instrumentation.supports == ">=2.9,<3"
 
-    assert set(Psycopg2Instrumentation.settings) == {"statement"}
-    assert Psycopg2Instrumentation.settings["statement"].default is False
+    settings = Psycopg2Instrumentation.settings
+    assert list(settings) == ["statements", "connections"]
+
+    statements = settings["statements"]
+    assert isinstance(statements, Aspect)
+    assert statements.primary is True
+    assert statements.defaults == {"leaf": True}
+    assert set(statements.settings) == {"statement"}
+    assert statements.settings["statement"].default is False
+
+    connections = settings["connections"]
+    assert isinstance(connections, Aspect)
+    assert connections.primary is False
+    assert connections.defaults == {"leaf": True}
+    assert set(connections.settings) == set()
 
 
 def test_the_description_is_the_docstring_first_line() -> None:
@@ -38,19 +51,46 @@ def test_the_description_is_the_docstring_first_line() -> None:
 def test_constructing_without_settings_works() -> None:
     instance = Psycopg2Instrumentation()
 
-    assert instance.settings == {"statement": False}
+    statements = instance.settings["statements"]
+    assert statements.enabled is True
+    assert statements.options == {"leaf": True}
+    assert statements.settings == {"statement": False}
+
+    connections = instance.settings["connections"]
+    assert connections.enabled is True
+    assert connections.options == {"leaf": True}
+    assert connections.settings == {}
     assert instance.applied == ()
     assert instance.pending == ("psycopg2",)
 
 
 def test_an_undeclared_setting_is_refused() -> None:
-    with pytest.raises(ConfigError, match="leaf"):
-        Psycopg2Instrumentation(leaf=False)
+    with pytest.raises(ConfigError, match="verbosity"):
+        Psycopg2Instrumentation(verbosity=2)
 
 
 def test_a_setting_of_the_wrong_type_is_refused() -> None:
     with pytest.raises(ConfigError, match="statement"):
         Psycopg2Instrumentation(statement="yes")
+
+
+def test_a_recording_key_under_an_aspect_is_checked() -> None:
+    with pytest.raises(ConfigError, match="aspect 'statements': capture_result"):
+        Psycopg2Instrumentation(statements={"capture_result": "sumary"})
+
+
+def test_an_unknown_key_under_an_aspect_is_refused() -> None:
+    with pytest.raises(ConfigError, match="aspect 'connections': unknown keys"):
+        Psycopg2Instrumentation(connections={"verbosity": 2})
+
+
+def test_a_flat_key_of_the_primary_aspect_reaches_it() -> None:
+    instance = Psycopg2Instrumentation(statement=True, leaf=False)
+
+    statements = instance.settings["statements"]
+    assert statements.settings == {"statement": True}
+    assert statements.options == {"leaf": False}
+    assert instance.settings["connections"].options == {"leaf": True}
 
 
 def test_the_installed_psycopg2_is_within_supports() -> None:

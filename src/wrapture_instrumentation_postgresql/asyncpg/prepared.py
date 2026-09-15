@@ -25,8 +25,16 @@ def instrument(module: Any, instrumentation: wrapture.Instrumentation) -> None:
     """Bind the prepared statement's methods; register their removal
     as this trigger's cleanup."""
 
-    settings = instrumentation.settings
-    record_statement = bool(settings["statement"])
+    # The statements aspect: its switch gates the bindings, its own
+    # setting says whether the SQL text is recorded, and its
+    # recording options splat over the package's masking policy, the
+    # declared leaf default among them.
+
+    statements = instrumentation.settings["statements"]
+    if not statements.enabled:
+        return
+
+    record_statement = bool(statements["statement"])
 
     def executes(operation: str | None = None) -> Any:
         def decorator(
@@ -60,11 +68,11 @@ def instrument(module: Any, instrumentation: wrapture.Instrumentation) -> None:
     for method in ("fetch", "fetchrow", "fetchval", "fetchmany", "executemany"):
         if method not in vars(statement_class):
             continue
-        bound = database_binding(statement_class, method)
+        bound = database_binding(statement_class, method, statements)
         bound.on_call.decorates(executes())
         named[method] = bound
 
-    explain = database_binding(statement_class, "explain")
+    explain = database_binding(statement_class, "explain", statements)
     explain.on_call.decorates(executes("EXPLAIN"))
     named["explain"] = explain
 
